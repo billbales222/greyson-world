@@ -45,7 +45,7 @@
   }
   .slot-line { width: 8px; height: 3px; border-radius: 2px; }
   .slot-inner-empty { width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.04); }
-  .slot-inner-next { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #8a7a6a; background: rgba(138,122,106,0.06); }
+  .slot-inner-next { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #c8a060; background: rgba(246,197,67,0.15); }
   .tray {
     display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
     padding: 16px; background: rgba(255,255,255,0.45); border-radius: 20px;
@@ -53,7 +53,7 @@
   }
   .tray-piece { cursor: pointer; transition: transform 0.1s; }
   .tray-piece:active { transform: scale(0.92); }
-  .hint { margin-top: 14px; font-size: 12px; color: #b0a090; text-align: center; }
+  .hint { margin-top: 14px; font-size: 13px; color: #a09080; text-align: center; }
   .win-msg { text-align: center; margin-bottom: 16px; }
   .win-title { font-size: 22px; color: #5a4a3a; margin-bottom: 6px; }
   .win-sub { font-size: 13px; color: #a09080; margin-bottom: 10px; }
@@ -83,6 +83,29 @@
     60% { transform: translateX(-6px); }
     80% { transform: translateX(6px); }
   }
+  @keyframes glow-pulse {
+    0%,100% { box-shadow: 0 0 8px rgba(246,197,67,0.3), 0 0 20px rgba(246,197,67,0.15); border-color: #c8a060; }
+    50% { box-shadow: 0 0 18px rgba(246,197,67,0.6), 0 0 36px rgba(246,197,67,0.3); border-color: #e0b040; }
+  }
+  @keyframes pop-in {
+    0% { transform: scale(0.3); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes celebrate {
+    0% { transform: scale(1); }
+    25% { transform: scale(1.12) rotate(-3deg); }
+    50% { transform: scale(1.18) rotate(3deg); }
+    75% { transform: scale(1.12) rotate(-2deg); }
+    100% { transform: scale(1); }
+  }
+  .slot-glow {
+    animation: glow-pulse 1.2s ease-in-out infinite;
+    border: 3px solid #c8a060;
+    background: rgba(246,197,67,0.1);
+  }
+  .piece-pop { animation: pop-in 0.3s ease-out forwards; }
+  .win-celebrate { animation: celebrate 0.6s ease-in-out; }
 </style>
 </head>
 <body>
@@ -92,6 +115,69 @@
 <script>
 var e = React.createElement;
 
+// ---- SOUND ENGINE ----
+var audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone(freq, duration, type, vol, delay) {
+  try {
+    var ctx = getAudio();
+    var t = ctx.currentTime + (delay || 0);
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol || 0.15, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + duration);
+  } catch(ex) {}
+}
+
+function soundCorrect() {
+  playTone(523, 0.12, "sine", 0.2, 0);
+  playTone(659, 0.12, "sine", 0.2, 0.08);
+  playTone(784, 0.18, "sine", 0.15, 0.16);
+}
+
+function soundWrong() {
+  playTone(220, 0.15, "triangle", 0.15, 0);
+  playTone(185, 0.3, "triangle", 0.12, 0.1);
+}
+
+function soundWin() {
+  [523, 587, 659, 784, 880, 1047].forEach(function(n, i) {
+    playTone(n, 0.2, "sine", 0.15, i * 0.1);
+  });
+}
+
+function soundBigWin() {
+  [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach(function(n, i) {
+    playTone(n, 0.28, "sine", 0.18, i * 0.12);
+  });
+}
+
+// ---- SPEECH ----
+function speak(text) {
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.85;
+      u.pitch = 1.15;
+      u.volume = 0.8;
+      window.speechSynthesis.speak(u);
+    }
+  } catch(ex) {}
+}
+
+// ---- PIECES ----
 var PIECES = [
   { id: "sunny", color: "#F6C543", mark: "\u25CF" },
   { id: "sky", color: "#5BA4E6", mark: "\u2605" },
@@ -175,6 +261,7 @@ function App() {
   var phaseS = _s("play"), setPhase = phaseS[1], phase = phaseS[0];
   var shakeS = _s(false), setShaking = shakeS[1], shaking = shakeS[0];
   var trayS = _s([]), setTray = trayS[1], tray = trayS[0];
+  var popS = _s(null), setPop = popS[1], popKey = popS[0];
 
   var level = levels[lvl];
   var nextSlot = locked.length;
@@ -184,15 +271,37 @@ function App() {
     setTray(shuffle(avail));
   }, [locked.length, lvl]);
 
+  // Speak on level start
+  React.useEffect(function() {
+    if (phase === "play" && locked.length === 0) {
+      var msg = lvl === 0 ? "tap the dots in the right order!" : "level " + (lvl+1) + "! " + level.count + " dots this time.";
+      setTimeout(function() { speak(msg); }, 400);
+    }
+  }, [lvl, phase]);
+
   function tapPiece(pid) {
     if (phase !== "play") return;
     if (pid === level.sequence[nextSlot]) {
       var nl = locked.concat([pid]);
+      setPop(pid + "-" + nl.length);
       setLocked(nl);
-      if (nl.length === level.count) setPhase("win");
+      if (nl.length === level.count) {
+        setPhase("win");
+        if (lvl < 5) {
+          setTimeout(function() { soundWin(); }, 100);
+          setTimeout(function() { speak("everyone is happy!"); }, 500);
+        } else {
+          setTimeout(function() { soundBigWin(); }, 100);
+          setTimeout(function() { speak("amazing! you did it!"); }, 600);
+        }
+      } else {
+        setTimeout(function() { soundCorrect(); }, 30);
+      }
     } else {
+      soundWrong();
       setShaking(true);
       setPhase("fail");
+      setTimeout(function() { speak("try again!"); }, 200);
       setTimeout(function() { setLocked([]); setShaking(false); setPhase("play"); }, 800);
     }
   }
@@ -203,7 +312,6 @@ function App() {
 
   var isWin = phase === "win";
 
-  // Level bar
   var lvlDots = [1,2,3,4,5,6].map(function(n, i) {
     return e("div", { key: i, className: "lvl-dot", style: {
       background: i < lvl ? PIECES[i].color : i === lvl ? "#5a4a3a" : "#e0dbd4",
@@ -211,35 +319,44 @@ function App() {
     }}, n);
   });
 
-  // Slots
   var slots = level.sequence.map(function(cid, i) {
     var done = i < locked.length;
     var isNext = i === nextSlot && phase === "play";
     var piece = done ? lookup[locked[i]] : null;
 
-    var slotStyle = {
-      border: done ? "3px solid " + piece.color + "44" : isNext ? "3px solid #8a7a6a" : "3px dashed #d5d0c8",
-      background: done ? piece.color + "0a" : isNext ? "rgba(138,122,106,0.08)" : "rgba(255,255,255,0.35)",
-      boxShadow: isNext ? "0 0 12px rgba(138,122,106,0.2)" : "none",
-    };
+    var slotClass = "slot" + (isNext ? " slot-glow" : "");
+    var slotStyle = {};
+    if (done) {
+      slotStyle.border = "3px solid " + piece.color + "44";
+      slotStyle.background = piece.color + "0a";
+      slotStyle.boxShadow = "none";
+    } else if (!isNext) {
+      slotStyle.border = "3px dashed #d5d0c8";
+      slotStyle.background = "rgba(255,255,255,0.35)";
+    }
 
     var inner;
     if (done && piece) {
-      inner = e(PC, { piece: piece, happy: isWin ? 1.8 : 0.9, size: isWin ? 62 : 58 });
+      var isPop = popKey === (locked[i] + "-" + (i+1));
+      inner = e("div", { key: locked[i], className: isPop ? "piece-pop" : "" },
+        e(PC, { piece: piece, happy: isWin ? 1.8 : 0.9, size: isWin ? 62 : 58 })
+      );
     } else if (isNext) {
       inner = e("div", { className: "slot-inner-next" });
     } else {
       inner = e("div", { className: "slot-inner-empty" });
     }
 
-    var parts = [e("div", { key: "s", className: "slot", style: slotStyle }, inner)];
+    var wrapClass = "slot-wrap" + (isWin ? " win-celebrate" : "");
+    var wrapStyle = isWin ? { animationDelay: (i * 0.1) + "s" } : undefined;
+
+    var parts = [e("div", { key: "s", className: slotClass, style: slotStyle }, inner)];
     if (i < level.sequence.length - 1) {
       parts.push(e("div", { key: "l", className: "slot-line", style: { background: done ? piece.color + "55" : "#e5e0d8" } }));
     }
-    return e("div", { key: i, className: "slot-wrap" }, parts);
+    return e("div", { key: i, className: wrapClass, style: wrapStyle }, parts);
   });
 
-  // Tray
   var trayPieces = tray.map(function(pid) {
     var p = lookup[pid];
     return e("div", {
@@ -248,12 +365,11 @@ function App() {
     }, e(PC, { piece: p, happy: 0, size: 58 }));
   });
 
-  // Build page
   var children = [
     e("h1", { key: "t" }, "happy dots"),
     e("p", { key: "s", className: "sub" }, "help them find where they belong"),
     e("div", { key: "lb", className: "lvl-bar" }, lvlDots),
-    e("div", { key: "ll", className: "lvl-label" }, "level " + (lvl+1) + " \u2014 " + level.count + " pieces"),
+    e("div", { key: "ll", className: "lvl-label" }, "level " + (lvl+1) + " \u2014 " + level.count + " dots"),
     e("div", { key: "sl", className: "slots", style: { animation: shaking ? "shake 0.5s ease" : "none" } }, slots),
   ];
 
@@ -272,7 +388,7 @@ function App() {
 
   if (phase === "play") {
     children.push(e("div", { key: "tr", className: "tray" }, trayPieces));
-    children.push(e("p", { key: "h", className: "hint" }, "which piece goes in the glowing spot?"));
+    children.push(e("p", { key: "h", className: "hint" }, "tap the dots in the right order"));
   }
 
   if (phase === "play" || phase === "win") {

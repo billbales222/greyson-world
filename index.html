@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="happy dots">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FFF8F0">
+<title>happy dots</title>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiaGFwcHkgZG90cyIsInNob3J0X25hbWUiOiJoYXBweSBkb3RzIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNGRkY4RjAiLCJ0aGVtZV9jb2xvciI6IiNGRkY4RjAifQ==">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { 
+    height: 100%; overflow: hidden;
+    background: linear-gradient(170deg, #FFF8F0 0%, #FDF5ED 30%, #F5EDE4 70%, #EDE5DC 100%);
+    font-family: Georgia, serif; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #app {
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; padding: 24px 16px;
+    padding-top: max(24px, env(safe-area-inset-top));
+  }
+  h1 { font-size: 28px; font-weight: normal; color: #5a4a3a; letter-spacing: 1px; }
+  .sub { font-size: 13px; color: #a09080; margin: 4px 0 14px; }
+  .lvl-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .lvl-dot {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; transition: all 0.3s;
+  }
+  .lvl-label { font-size: 13px; color: #8a7a6a; margin-bottom: 18px; }
+  .slots {
+    display: flex; align-items: center; gap: 4px;
+    margin-bottom: 24px; padding: 10px 6px;
+    overflow-x: auto; max-width: 100%;
+  }
+  .slot-wrap { display: flex; align-items: center; flex-shrink: 0; }
+  .slot {
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s ease;
+  }
+  .slot-line { width: 8px; height: 3px; border-radius: 2px; }
+  .slot-inner-empty { width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.04); }
+  .slot-inner-next { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #8a7a6a; background: rgba(138,122,106,0.06); }
+  .tray {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+    padding: 16px; background: rgba(255,255,255,0.45); border-radius: 20px;
+    min-height: 76px; max-width: 400px; width: 100%;
+  }
+  .tray-piece { cursor: pointer; transition: transform 0.1s; }
+  .tray-piece:active { transform: scale(0.92); }
+  .hint { margin-top: 14px; font-size: 12px; color: #b0a090; text-align: center; }
+  .win-msg { text-align: center; margin-bottom: 16px; }
+  .win-title { font-size: 22px; color: #5a4a3a; margin-bottom: 6px; }
+  .win-sub { font-size: 13px; color: #a09080; margin-bottom: 10px; }
+  .btn {
+    background: none; border: 2px solid #d0c0a0; border-radius: 24px;
+    padding: 10px 36px; font-size: 16px; color: #5a4a3a;
+    font-family: Georgia, serif; cursor: pointer;
+  }
+  .btn:active { background: #f0e8dc; }
+  .btn-sm {
+    background: none; border: 1px solid #ddd8d0; border-radius: 16px;
+    padding: 6px 18px; font-size: 12px; color: #b0a090;
+    font-family: Georgia, serif; cursor: pointer;
+  }
+  .btn-sm:active { background: #f0e8dc; }
+  .btns { display: flex; gap: 12px; margin-top: 20px; }
+  .fail-msg {
+    padding: 16px; background: rgba(255,255,255,0.45); border-radius: 20px;
+    min-height: 76px; max-width: 400px; width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: #a08070;
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+var e = React.createElement;
+
+var PIECES = [
+  { id: "sunny", color: "#F6C543", mark: "\u25CF" },
+  { id: "sky", color: "#5BA4E6", mark: "\u2605" },
+  { id: "coral", color: "#E8726F", mark: "\u2665" },
+  { id: "mint", color: "#5EC69A", mark: "\u25C6" },
+  { id: "lavender", color: "#A78BDB", mark: "\u263D" },
+  { id: "peach", color: "#F4A27A", mark: "\u25B2" },
+  { id: "cloud", color: "#B0C4D8", mark: "\u2601" },
+  { id: "rose", color: "#E091B5", mark: "\u273F" },
+];
+
+var lookup = {};
+PIECES.forEach(function(p) { lookup[p.id] = p; });
+
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+function buildGame() {
+  var pool = shuffle(PIECES);
+  var lvls = [];
+  for (var i = 0; i < 6; i++) {
+    var count = 3 + i;
+    var picked = pool.slice(0, count);
+    var seq = shuffle(picked).map(function(p) { return p.id; });
+    lvls.push({ count: count, sequence: seq, pool: picked });
+  }
+  return lvls;
+}
+
+function Face(props) {
+  var happy = props.happy, r = props.r;
+  var eo = r * 0.28, ey = -r * 0.15, my = r * 0.25;
+  if (happy >= 1.5) {
+    return e("g", null,
+      e("path", { d: "M"+(-eo-4)+","+ey+" Q"+(-eo)+","+(ey-7)+" "+(-eo+4)+","+ey, fill: "none", stroke: "#555", strokeWidth: "2.2", strokeLinecap: "round" }),
+      e("path", { d: "M"+(eo-4)+","+ey+" Q"+eo+","+(ey-7)+" "+(eo+4)+","+ey, fill: "none", stroke: "#555", strokeWidth: "2.2", strokeLinecap: "round" }),
+      e("path", { d: "M"+(-r*.35)+","+my+" Q0,"+(my+r*.4)+" "+(r*.35)+","+my, fill: "none", stroke: "#555", strokeWidth: "2.2", strokeLinecap: "round" }),
+      e("circle", { cx: -eo-7, cy: my, r: 3.5, fill: "rgba(255,130,130,0.4)" }),
+      e("circle", { cx: eo+7, cy: my, r: 3.5, fill: "rgba(255,130,130,0.4)" })
+    );
+  }
+  if (happy >= 0.8) {
+    return e("g", null,
+      e("circle", { cx: -eo, cy: ey, r: 2.5, fill: "#555" }),
+      e("circle", { cx: eo, cy: ey, r: 2.5, fill: "#555" }),
+      e("circle", { cx: -eo+1, cy: ey-1, r: 0.8, fill: "white" }),
+      e("circle", { cx: eo+1, cy: ey-1, r: 0.8, fill: "white" }),
+      e("path", { d: "M"+(-r*.2)+","+my+" Q0,"+(my+r*.18)+" "+(r*.2)+","+my, fill: "none", stroke: "#555", strokeWidth: "1.6", strokeLinecap: "round" })
+    );
+  }
+  return e("g", null,
+    e("circle", { cx: -eo, cy: ey, r: 2, fill: "#888" }),
+    e("circle", { cx: eo, cy: ey, r: 2, fill: "#888" }),
+    e("line", { x1: -r*.15, y1: my, x2: r*.15, y2: my, stroke: "#888", strokeWidth: "1.5", strokeLinecap: "round" })
+  );
+}
+
+function PC(props) {
+  var piece = props.piece, happy = props.happy, s = props.size;
+  var r = s * 0.42, sc = 1 + Math.max(0, happy) * 0.08;
+  var children = [];
+  if (happy > 0.5) children.push(e("circle", { key: "g", cx: s/2, cy: s/2, r: r*sc*1.18, fill: piece.color, opacity: happy >= 1.5 ? 0.2 : 0.1 }));
+  children.push(e("circle", { key: "b", cx: s/2, cy: s/2, r: r*sc, fill: piece.color, stroke: happy > 0.5 ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.08)", strokeWidth: happy > 0.5 ? 2.5 : 1.5 }));
+  children.push(e("text", { key: "m", x: s/2, y: s/2-r*.35, textAnchor: "middle", fontSize: s*.16, fill: "rgba(255,255,255,0.65)", dominantBaseline: "central" }, piece.mark));
+  children.push(e("g", { key: "f", transform: "translate("+s/2+","+(s/2+r*.08)+")" }, e(Face, { happy: happy, r: r*0.7 })));
+  return e("svg", { width: s, height: s, viewBox: "0 0 "+s+" "+s, style: { overflow: "visible", display: "block" } }, children);
+}
+
+function App() {
+  var _levels = React.useRef(buildGame());
+  var _s = React.useState;
+  var levels = _s(_levels.current), setLevels = levels[1]; levels = levels[0];
+  var lvlS = _s(0), setLvl = lvlS[1], lvl = lvlS[0];
+  var lockS = _s([]), setLocked = lockS[1], locked = lockS[0];
+  var phaseS = _s("play"), setPhase = phaseS[1], phase = phaseS[0];
+  var shakeS = _s(false), setShaking = shakeS[1], shaking = shakeS[0];
+  var trayS = _s([]), setTray = trayS[1], tray = trayS[0];
+
+  var level = levels[lvl];
+  var nextSlot = locked.length;
+
+  React.useEffect(function() {
+    var avail = level.pool.map(function(p) { return p.id; }).filter(function(id) { return locked.indexOf(id) === -1; });
+    setTray(shuffle(avail));
+  }, [locked.length, lvl]);
+
+  function tapPiece(pid) {
+    if (phase !== "play") return;
+    if (pid === level.sequence[nextSlot]) {
+      var nl = locked.concat([pid]);
+      setLocked(nl);
+      if (nl.length === level.count) setPhase("win");
+    } else {
+      setShaking(true);
+      setPhase("fail");
+      setTimeout(function() { setLocked([]); setShaking(false); setPhase("play"); }, 800);
+    }
+  }
+
+  function advance() { setLvl(lvl+1); setLocked([]); setPhase("play"); }
+  function newGame() { var g = buildGame(); setLevels(g); _levels.current = g; setLvl(0); setLocked([]); setPhase("play"); }
+  function restart() { setLvl(0); setLocked([]); setPhase("play"); }
+
+  var isWin = phase === "win";
+
+  // Level bar
+  var lvlDots = [1,2,3,4,5,6].map(function(n, i) {
+    return e("div", { key: i, className: "lvl-dot", style: {
+      background: i < lvl ? PIECES[i].color : i === lvl ? "#5a4a3a" : "#e0dbd4",
+      color: i <= lvl ? "white" : "#bbb", opacity: i <= lvl ? 1 : 0.4,
+    }}, n);
+  });
+
+  // Slots
+  var slots = level.sequence.map(function(cid, i) {
+    var done = i < locked.length;
+    var isNext = i === nextSlot && phase === "play";
+    var piece = done ? lookup[locked[i]] : null;
+
+    var slotStyle = {
+      border: done ? "3px solid " + piece.color + "44" : isNext ? "3px solid #8a7a6a" : "3px dashed #d5d0c8",
+      background: done ? piece.color + "0a" : isNext ? "rgba(138,122,106,0.08)" : "rgba(255,255,255,0.35)",
+      boxShadow: isNext ? "0 0 12px rgba(138,122,106,0.2)" : "none",
+    };
+
+    var inner;
+    if (done && piece) {
+      inner = e(PC, { piece: piece, happy: isWin ? 1.8 : 0.9, size: isWin ? 62 : 58 });
+    } else if (isNext) {
+      inner = e("div", { className: "slot-inner-next" });
+    } else {
+      inner = e("div", { className: "slot-inner-empty" });
+    }
+
+    var parts = [e("div", { key: "s", className: "slot", style: slotStyle }, inner)];
+    if (i < level.sequence.length - 1) {
+      parts.push(e("div", { key: "l", className: "slot-line", style: { background: done ? piece.color + "55" : "#e5e0d8" } }));
+    }
+    return e("div", { key: i, className: "slot-wrap" }, parts);
+  });
+
+  // Tray
+  var trayPieces = tray.map(function(pid) {
+    var p = lookup[pid];
+    return e("div", {
+      key: pid, className: "tray-piece",
+      onClick: function() { tapPiece(pid); }
+    }, e(PC, { piece: p, happy: 0, size: 58 }));
+  });
+
+  // Build page
+  var children = [
+    e("h1", { key: "t" }, "happy dots"),
+    e("p", { key: "s", className: "sub" }, "help them find where they belong"),
+    e("div", { key: "lb", className: "lvl-bar" }, lvlDots),
+    e("div", { key: "ll", className: "lvl-label" }, "level " + (lvl+1) + " \u2014 " + level.count + " pieces"),
+    e("div", { key: "sl", className: "slots", style: { animation: shaking ? "shake 0.5s ease" : "none" } }, slots),
+  ];
+
+  if (phase === "win") {
+    children.push(e("div", { key: "w", className: "win-msg" },
+      e("div", { className: "win-title" }, lvl < 5 ? "everyone is happy!" : "\u2726 amazing \u2726"),
+      lvl < 5 ? e("div", { className: "win-sub" }, "remember this pattern...") : null,
+      e("button", { className: "btn", onClick: lvl < 5 ? advance : newGame },
+        lvl < 5 ? "level " + (lvl+2) + " \u2192" : "new game \u2726")
+    ));
+  }
+
+  if (phase === "fail") {
+    children.push(e("div", { key: "f", className: "fail-msg" }, "not quite... try again!"));
+  }
+
+  if (phase === "play") {
+    children.push(e("div", { key: "tr", className: "tray" }, trayPieces));
+    children.push(e("p", { key: "h", className: "hint" }, "which piece goes in the glowing spot?"));
+  }
+
+  if (phase === "play" || phase === "win") {
+    var btns = [];
+    if (lvl > 0 && phase === "play") btns.push(e("button", { key: "r", className: "btn-sm", onClick: restart }, "restart from level 1"));
+    btns.push(e("button", { key: "n", className: "btn-sm", onClick: newGame }, "new game"));
+    children.push(e("div", { key: "bt", className: "btns" }, btns));
+  }
+
+  return e("div", { id: "app" }, children);
+}
+
+ReactDOM.render(e(App), document.getElementById("app"));
+</script>
+</body>
+</html>

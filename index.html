@@ -12,16 +12,25 @@
 <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiaGFwcHkgZG90cyIsInNob3J0X25hbWUiOiJoYXBweSBkb3RzIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNGRkY4RjAiLCJ0aGVtZV9jb2xvciI6IiNGRkY4RjAifQ==">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { 
-    height: 100%; overflow: hidden;
+  html {
+    height: 100%;
     background: linear-gradient(170deg, #FFF8F0 0%, #FDF5ED 30%, #F5EDE4 70%, #EDE5DC 100%);
+  }
+  body { 
+    min-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: transparent;
     font-family: Georgia, serif; user-select: none; -webkit-user-select: none;
     touch-action: manipulation;
   }
   #app {
     display: flex; flex-direction: column; align-items: center;
-    min-height: 100vh; padding: 24px 16px;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    padding: 24px 16px;
     padding-top: max(24px, env(safe-area-inset-top));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
   }
   h1 { font-size: 28px; font-weight: normal; color: #5a4a3a; letter-spacing: 1px; }
   .sub { font-size: 13px; color: #a09080; margin: 4px 0 14px; }
@@ -36,6 +45,7 @@
     display: flex; align-items: center; gap: 4px;
     margin-bottom: 24px; padding: 10px 6px;
     overflow-x: auto; max-width: 100%;
+    -webkit-overflow-scrolling: touch;
   }
   .slot-wrap { display: flex; align-items: center; flex-shrink: 0; }
   .slot {
@@ -69,7 +79,7 @@
     font-family: Georgia, serif; cursor: pointer;
   }
   .btn-sm:active { background: #f0e8dc; }
-  .btns { display: flex; gap: 12px; margin-top: 20px; }
+  .btns { display: flex; gap: 12px; margin-top: 20px; margin-bottom: 24px; }
   .fail-msg {
     padding: 16px; background: rgba(255,255,255,0.45); border-radius: 20px;
     min-height: 76px; max-width: 400px; width: 100%;
@@ -203,9 +213,10 @@ function shuffle(arr) {
 
 function buildGame() {
   var pool = shuffle(PIECES);
+  var counts = [2, 3, 4, 5];
   var lvls = [];
-  for (var i = 0; i < 6; i++) {
-    var count = 3 + i;
+  for (var i = 0; i < counts.length; i++) {
+    var count = counts[i];
     var picked = pool.slice(0, count);
     var seq = shuffle(picked).map(function(p) { return p.id; });
     lvls.push({ count: count, sequence: seq, pool: picked });
@@ -287,7 +298,7 @@ function App() {
       setLocked(nl);
       if (nl.length === level.count) {
         setPhase("win");
-        if (lvl < 5) {
+        if (lvl < 3) {
           setTimeout(function() { soundWin(); }, 100);
           setTimeout(function() { speak("everyone is happy!"); }, 500);
         } else {
@@ -312,7 +323,7 @@ function App() {
 
   var isWin = phase === "win";
 
-  var lvlDots = [1,2,3,4,5,6].map(function(n, i) {
+  var lvlDots = [1,2,3,4].map(function(n, i) {
     return e("div", { key: i, className: "lvl-dot", style: {
       background: i < lvl ? PIECES[i].color : i === lvl ? "#5a4a3a" : "#e0dbd4",
       color: i <= lvl ? "white" : "#bbb", opacity: i <= lvl ? 1 : 0.4,
@@ -375,10 +386,10 @@ function App() {
 
   if (phase === "win") {
     children.push(e("div", { key: "w", className: "win-msg" },
-      e("div", { className: "win-title" }, lvl < 5 ? "everyone is happy!" : "\u2726 amazing \u2726"),
-      lvl < 5 ? e("div", { className: "win-sub" }, "remember this pattern...") : null,
-      e("button", { className: "btn", onClick: lvl < 5 ? advance : newGame },
-        lvl < 5 ? "level " + (lvl+2) + " \u2192" : "new game \u2726")
+      e("div", { className: "win-title" }, lvl < 3 ? "everyone is happy!" : "\u2726 amazing \u2726"),
+      lvl < 3 ? e("div", { className: "win-sub" }, "remember this pattern...") : null,
+      e("button", { className: "btn", onClick: lvl < 3 ? advance : newGame },
+        lvl < 3 ? "level " + (lvl+2) + " \u2192" : "new game \u2726")
     ));
   }
 
@@ -398,7 +409,7 @@ function App() {
     children.push(e("div", { key: "bt", className: "btns" }, btns));
   }
 
-  return e("div", { id: "app" }, children);
+  return e(React.Fragment, null, children);
 }
 
 ReactDOM.render(e(App), document.getElementById("app"));
